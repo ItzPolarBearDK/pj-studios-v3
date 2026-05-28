@@ -16,6 +16,7 @@
         <option value="Coinflip">Coinflip</option>
         <option value="RPS">RockPaperScissors</option>
         <option value="HigherLower">Higher/Lower</option>
+        <option value="Random">Random</option>
       </select>
     <label style="margin:0 8px">You:</label>
     <select @onchange="OnPlayerSymbolChanged">
@@ -39,7 +40,10 @@
   {
     <div class="overlay">
       <div class="overlay-card">
-        @if (resolutionMode == ResolutionMode.Coinflip)
+        @{
+          var effective = chosenRandomMode ?? resolutionMode;
+        }
+        @if (effective == ResolutionMode.Coinflip)
         {
           <h3>Coinflip</h3>
           <p>Click flip to decide who gets the square.</p>
@@ -57,7 +61,7 @@
             <p>@coinResultText</p>
           }
         }
-        else if (resolutionMode == ResolutionMode.RPS)
+        else if (effective == ResolutionMode.RPS)
         {
           <h3>Rock · Paper · Scissors</h3>
           <p>Choose to challenge for this square.</p>
@@ -98,7 +102,7 @@
             </div>
           }
         }
-        else if (resolutionMode == ResolutionMode.HigherLower)
+        else if (effective == ResolutionMode.HigherLower)
         {
           <h3>Higher / Lower</h3>
           <p>Challenger's number:</p>
@@ -141,7 +145,7 @@
 
 @code {
   enum OpponentType { Human, AI }
-  enum ResolutionMode { Normal, Coinflip, RPS, HigherLower }
+  enum ResolutionMode { Normal, Coinflip, RPS, HigherLower, Random }
   enum RPS { Rock, Paper, Scissors }
 
   string?[] board = new string?[9];
@@ -151,6 +155,7 @@
   OpponentType opponent = OpponentType.Human;
   bool playerIsX = true; // player choice
   ResolutionMode resolutionMode = ResolutionMode.Normal;
+  ResolutionMode? chosenRandomMode = null;
   int pendingIndex = -1;
   bool challengerIsX = true;
   bool challengerIsHuman = true;
@@ -223,6 +228,16 @@
     humanRpsChoice = null;
     otherRpsChoice = null;
     rpsMessage = null;
+    // pick a random resolver if user selected Random
+    if (resolutionMode == ResolutionMode.Random)
+    {
+      var options = new[] { ResolutionMode.Coinflip, ResolutionMode.RPS, ResolutionMode.HigherLower };
+      chosenRandomMode = options[rng.Next(options.Length)];
+    }
+    else
+    {
+      chosenRandomMode = null;
+    }
 
     if (resolutionMode == ResolutionMode.Coinflip)
     {
@@ -300,8 +315,18 @@
         pendingIndex = move;
         challengerIsX = aiPlaysX;
         challengerIsHuman = false;
-        // If AI initiates a Higher/Lower challenge, pick its challenger number now
-        if (resolutionMode == ResolutionMode.HigherLower)
+        // pick random resolver if set to Random
+        if (resolutionMode == ResolutionMode.Random)
+        {
+          var options = new[] { ResolutionMode.Coinflip, ResolutionMode.RPS, ResolutionMode.HigherLower };
+          chosenRandomMode = options[rng.Next(options.Length)];
+        }
+        else
+        {
+          chosenRandomMode = null;
+        }
+        // If AI initiates a Higher/Lower challenge, pick its challenger number now (use effective)
+        if ((chosenRandomMode ?? resolutionMode) == ResolutionMode.HigherLower)
         {
           hlPlayerNumber = rng.Next(1, 101);
           hlResultText = null;
@@ -333,6 +358,7 @@
         coinResultText = winnerIsChallenger ? "Challenger wins!" : "Opponent wins!";
         isCoinFlipping = false;
         pendingIndex = -1;
+        chosenRandomMode = null;
         _ = PostMoveAsync();
       });
     });
@@ -359,6 +385,7 @@
 
     ApplyMark(pendingIndex, winnerIsX ? "X" : "O");
     pendingIndex = -1;
+    chosenRandomMode = null;
     await PostMoveAsync();
   }
 
@@ -418,6 +445,7 @@
     ApplyMark(pendingIndex, winnerIsX ? "X" : "O");
     rpsMessage = null;
     pendingIndex = -1;
+    chosenRandomMode = null;
     humanRpsChoice = null;
     otherRpsChoice = null;
     _ = PostMoveAsync();
