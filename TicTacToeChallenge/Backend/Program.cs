@@ -1,4 +1,7 @@
 
+using Backend.Data;
+using Microsoft.EntityFrameworkCore;
+
 namespace Backend
 {
     public class Program
@@ -8,6 +11,13 @@ namespace Backend
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
+
+
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+
+            builder.Services.AddDbContext<AppDBContext>(options =>
+                options.UseNpgsql(connectionString));
 
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
