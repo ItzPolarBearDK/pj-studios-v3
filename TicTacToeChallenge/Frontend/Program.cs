@@ -1,4 +1,5 @@
 using Frontend.Components;
+using Microsoft.AspNetCore.Components.Server;
 
 namespace Frontend
 {
@@ -11,6 +12,9 @@ namespace Frontend
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
+
+            // Enable detailed circuit errors for development diagnostics.
+            builder.Services.Configure<CircuitOptions>(options => options.DetailedErrors = true);
 
             var app = builder.Build();
 
