@@ -2,6 +2,7 @@
   max-width: 520px;
   margin: 18px auto;
   padding: 18px;
+  position: relative;
   background: linear-gradient(180deg,#ffffffcc, #f0f4ffcc);
   border-radius: 12px;
   box-shadow: 0 6px 20px rgba(34,41,47,0.12);
@@ -58,3 +59,44 @@
   .tictactoe-root{ margin:12px; padding:12px; }
   .cell{ font-size:32px; }
 }
+
+/* Overlay styles */
+.overlay {
+  position: absolute;
+  left: 0; right: 0; top: 0; bottom: 0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: rgba(11,18,32,0.35);
+  z-index: 40;
+  animation: overlayFade .18s ease both;
+}
+
+@keyframes overlayFade {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.overlay-card {
+  background: white;
+  padding: 18px;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(3,7,18,0.4);
+  min-width: 280px;
+  text-align:center;
+}
+
+.coin-wrap { display:flex; justify-content:center; margin: 8px 0; }
+.coin {
+  width: 84px; height: 84px; border-radius:50%; position:relative; transform-style: preserve-3d;
+  transition: transform 1.2s cubic-bezier(.2,.9,.2,1);
+  box-shadow: 0 8px 20px rgba(11,18,32,0.14);
+}
+.coin .face { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:28px; border-radius:50%; backface-visibility: hidden; }
+.coin .heads { background: linear-gradient(180deg,#ffd966,#f1c40f); }
+.coin .tails { background: linear-gradient(180deg,#e2e8ff,#a9b5ff); transform: rotateY(180deg); }
+.coin.flipping { transform: rotateY(1080deg); }
+
+.overlay-card .coin { margin: 6px auto; }
+.overlay-card p { margin: 8px 0 0 0; }
+
+.rps-buttons button { margin:4px; padding:6px 10px; }
