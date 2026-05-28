@@ -5,11 +5,19 @@
   <div class="header">
   <h2>Tic Tac Toe</h2>
   <div class="controls">
-    <label style="margin-right:8px">Opponent:</label>
+      <label style="margin-right:8px">Opponent:</label>
     <select @onchange="OnOpponentChanged">
     <option value="Human" selected>Human</option>
     <option value="AI">AI</option>
     </select>
+      <label style="margin:0 8px">Resolve:</label>
+      <select @bind="resolutionMode">
+        <option value="Normal">Normal</option>
+        <option value="Coinflip">Coinflip</option>
+        <option value="RPS">RockPaperScissors</option>
+        <option value="HigherLower">Higher/Lower</option>
+        <option value="Random">Random</option>
+      </select>
     <label style="margin:0 8px">You:</label>
     <select @onchange="OnPlayerSymbolChanged">
     <option value="X" selected>X</option>
@@ -28,6 +36,107 @@
   }
   </div>
 
+  @if (pendingIndex >= 0)
+  {
+    <div class="overlay">
+      <div class="overlay-card">
+        @{
+          var effective = chosenRandomMode ?? resolutionMode;
+        }
+        @if (effective == ResolutionMode.Coinflip)
+        {
+          <h3>Coinflip</h3>
+          <p>Click flip to decide who gets the square.</p>
+          <div class="coin-wrap">
+            <div class="coin @(isCoinFlipping ? "flipping" : "")">
+              <div class="face heads">X</div>
+              <div class="face tails">O</div>
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <button class="new-btn" @onclick="DoCoinflip" disabled="@isCoinFlipping">Flip</button>
+          </div>
+          @if (coinResultText != null)
+          {
+            <p>@coinResultText</p>
+          }
+        }
+        else if (effective == ResolutionMode.RPS)
+        {
+          <h3>Rock · Paper · Scissors</h3>
+          <p>Choose to challenge for this square.</p>
+          @if (opponent == OpponentType.AI)
+          {
+            <div>
+              <p>Your choice:</p>
+              <div class="rps-buttons">
+                <button @onclick="() => PlayerChoseRPS(RPS.Rock)">Rock</button>
+                <button @onclick="() => PlayerChoseRPS(RPS.Paper)">Paper</button>
+                <button @onclick="() => PlayerChoseRPS(RPS.Scissors)">Scissors</button>
+              </div>
+            </div>
+            @if (rpsMessage != null)
+            {
+              <p>@rpsMessage</p>
+            }
+          }
+          else
+          {
+            <div>
+              <p>Player @(challengerIsX ? "X" : "O") choose:</p>
+              <div class="rps-buttons">
+                <button @onclick="() => SetHumanRPSChoice(true, RPS.Rock)">Rock</button>
+                <button @onclick="() => SetHumanRPSChoice(true, RPS.Paper)">Paper</button>
+                <button @onclick="() => SetHumanRPSChoice(true, RPS.Scissors)">Scissors</button>
+              </div>
+              <p>Player @(!challengerIsX ? "X" : "O") choose:</p>
+              <div class="rps-buttons">
+                <button @onclick="() => SetHumanRPSChoice(false, RPS.Rock)">Rock</button>
+                <button @onclick="() => SetHumanRPSChoice(false, RPS.Paper)">Paper</button>
+                <button @onclick="() => SetHumanRPSChoice(false, RPS.Scissors)">Scissors</button>
+              </div>
+              @if (rpsMessage != null)
+              {
+                <p>@rpsMessage</p>
+              }
+            </div>
+          }
+        }
+        else if (effective == ResolutionMode.HigherLower)
+        {
+          <h3>Higher / Lower</h3>
+          <p>Challenger's number:</p>
+          @if (challengerIsHuman)
+          {
+            <input type="number" min="1" max="100" @bind="hlPlayerNumber" />
+            <p class="hint">Når du klikker knappen nedenfor, vil modspilleren (eller AI) vælge Higher eller Lower.</p>
+          }
+          else
+          {
+            <div class="secret">@hlPlayerNumber</div>
+            <p class="hint">AI valgte dette nummer. Vælg om det er højere eller lavere end spillets tal.</p>
+          }
+
+          <div style="margin-top:8px">
+            @if (opponent == OpponentType.AI && challengerIsHuman)
+            {
+              <p>AI vælger nu...</p>
+            }
+            <button class="new-btn" @onclick="async () => await HLPick(true)" disabled="@(pendingIndex < 0)">Higher</button>
+            <button class="new-btn" @onclick="async () => await HLPick(false)" disabled="@(pendingIndex < 0)">Lower</button>
+          </div>
+          @if (hlResultText != null)
+          {
+            <p>@hlResultText</p>
+          }
+        }
+        <div style="margin-top:8px">
+          <button class="new-btn" @onclick="CancelPending">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
+
   @if (gameOver)
   {
   <div class="result">@ResultText</div>
@@ -36,6 +145,8 @@
 
 @code {
   enum OpponentType { Human, AI }
+  enum ResolutionMode { Normal, Coinflip, RPS, HigherLower, Random }
+  enum RPS { Rock, Paper, Scissors }
 
   string?[] board = new string?[9];
   bool xTurn = true;
@@ -43,6 +154,21 @@
   string? winner = null;
   OpponentType opponent = OpponentType.Human;
   bool playerIsX = true; // player choice
+  ResolutionMode resolutionMode = ResolutionMode.Normal;
+  ResolutionMode? chosenRandomMode = null;
+  int pendingIndex = -1;
+  bool challengerIsX = true;
+  bool challengerIsHuman = true;
+  RPS? humanRpsChoice = null;
+  RPS? otherRpsChoice = null;
+  string? rpsMessage = null;
+  Random rng = new Random();
+  bool isCoinFlipping = false;
+  string? coinResultText = null;
+  // Higher/Lower state
+  int hlPlayerNumber = 50;
+  int hlSecretNumber = 0;
+  string? hlResultText = null;
 
   protected override void OnInitialized()
   {
@@ -75,6 +201,10 @@
         _ = AIMoveIfNeeded();
       }
     }
+    pendingIndex = -1;
+    humanRpsChoice = null;
+    otherRpsChoice = null;
+    rpsMessage = null;
   }
 
   async Task MakeMove(int idx)
@@ -84,22 +214,63 @@
     // prevent clicking when it's AI turn
     if (opponent == OpponentType.AI && xTurn != playerIsX) return;
 
-    board[idx] = xTurn ? "X" : "O";
+    if (resolutionMode == ResolutionMode.Normal)
+    {
+      ApplyMark(idx, xTurn ? "X" : "O");
+      await PostMoveAsync();
+      return;
+    }
+
+    // start pending resolution (human initiated)
+    pendingIndex = idx;
+    challengerIsX = xTurn;
+    challengerIsHuman = true;
+    humanRpsChoice = null;
+    otherRpsChoice = null;
+    rpsMessage = null;
+    // pick a random resolver if user selected Random
+    if (resolutionMode == ResolutionMode.Random)
+    {
+      var options = new[] { ResolutionMode.Coinflip, ResolutionMode.RPS, ResolutionMode.HigherLower };
+      chosenRandomMode = options[rng.Next(options.Length)];
+    }
+    else
+    {
+      chosenRandomMode = null;
+    }
+
+    if (resolutionMode == ResolutionMode.Coinflip)
+    {
+      DoCoinflip();
+    }
+    else if (resolutionMode == ResolutionMode.RPS && opponent == OpponentType.AI)
+    {
+      // AI will pick when player chooses
+    }
+  }
+
+  void ApplyMark(int idx, string mark)
+  {
+    board[idx] = mark;
     if (CheckWinner())
     {
       gameOver = true;
-      winner = board[idx];
-      return;
+      winner = mark;
     }
-    if (board.All(s => s != null))
+    else if (board.All(s => s != null))
     {
       gameOver = true;
-      winner = null; // draw
-      return;
+      winner = null;
     }
+    else
+    {
+      xTurn = !xTurn;
+    }
+  }
 
-    xTurn = !xTurn;
-
+  async Task PostMoveAsync()
+  {
+    await InvokeAsync(StateHasChanged);
     if (opponent == OpponentType.AI)
     {
       await AIMoveIfNeeded();
@@ -118,23 +289,174 @@
     int move = BestMove(aiMark);
     if (move >= 0)
     {
-      board[move] = aiMark;
-      if (CheckWinner())
+      // AI intends to take `move` — if resolution mode is Normal apply immediately,
+      // otherwise open the resolution overlay so the human can contest.
+      if (resolutionMode == ResolutionMode.Normal)
       {
-        gameOver = true;
-        winner = aiMark;
-      }
-      else if (board.All(s => s != null))
-      {
-        gameOver = true;
-        winner = null;
+        board[move] = aiMark;
+        if (CheckWinner())
+        {
+          gameOver = true;
+          winner = aiMark;
+        }
+        else if (board.All(s => s != null))
+        {
+          gameOver = true;
+          winner = null;
+        }
+        else
+        {
+          xTurn = !xTurn;
+        }
+        await InvokeAsync(StateHasChanged);
       }
       else
       {
-        xTurn = !xTurn;
+        pendingIndex = move;
+        challengerIsX = aiPlaysX;
+        challengerIsHuman = false;
+        // pick random resolver if set to Random
+        if (resolutionMode == ResolutionMode.Random)
+        {
+          var options = new[] { ResolutionMode.Coinflip, ResolutionMode.RPS, ResolutionMode.HigherLower };
+          chosenRandomMode = options[rng.Next(options.Length)];
+        }
+        else
+        {
+          chosenRandomMode = null;
+        }
+        // If AI initiates a Higher/Lower challenge, pick its challenger number now (use effective)
+        if ((chosenRandomMode ?? resolutionMode) == ResolutionMode.HigherLower)
+        {
+          hlPlayerNumber = rng.Next(1, 101);
+          hlResultText = null;
+        }
+        humanRpsChoice = null;
+        otherRpsChoice = null;
+        rpsMessage = null;
+        await InvokeAsync(StateHasChanged);
       }
-      await InvokeAsync(StateHasChanged);
     }
+  }
+
+  void DoCoinflip()
+  {
+    if (pendingIndex < 0) return;
+    if (isCoinFlipping) return;
+    isCoinFlipping = true;
+    coinResultText = null;
+    _ = InvokeAsync(StateHasChanged);
+    // let the CSS animation play
+    _ = Task.Run(async () => {
+      await Task.Delay(1200);
+      bool challengerWins = rng.Next(2) == 0;
+      bool winnerIsChallenger = challengerWins;
+      bool winnerIsX = winnerIsChallenger ? challengerIsX : !challengerIsX;
+      // update on UI thread
+      await InvokeAsync(() => {
+        ApplyMark(pendingIndex, winnerIsX ? "X" : "O");
+        coinResultText = winnerIsChallenger ? "Challenger wins!" : "Opponent wins!";
+        isCoinFlipping = false;
+        pendingIndex = -1;
+        chosenRandomMode = null;
+        _ = PostMoveAsync();
+      });
+    });
+  }
+
+  async Task HLPick(bool saysHigher)
+  {
+    if (pendingIndex < 0) return;
+    // If challenger is human and opponent is AI, allow AI to randomly pick choice instead of human clicking
+    if (!challengerIsHuman && opponent == OpponentType.AI)
+    {
+      // both AI, choose randomly
+      saysHigher = rng.Next(2) == 0;
+    }
+
+    // Generate secret and evaluate
+    hlSecretNumber = rng.Next(1, 101);
+    bool challengerIsHigher = hlPlayerNumber > hlSecretNumber;
+    bool challengerWins = (saysHigher == challengerIsHigher);
+    bool winnerIsX = challengerWins ? challengerIsX : !challengerIsX;
+
+    hlResultText = $"Secret: {hlSecretNumber}. Challenger's number {hlPlayerNumber} is {(challengerIsHigher ? "higher" : "lower")}.";
+    if (challengerWins) hlResultText += " Challenger wins!"; else hlResultText += " Challenger loses.";
+
+    ApplyMark(pendingIndex, winnerIsX ? "X" : "O");
+    pendingIndex = -1;
+    chosenRandomMode = null;
+    await PostMoveAsync();
+  }
+
+  void PlayerChoseRPS(RPS choice)
+  {
+    if (pendingIndex < 0) return;
+    // human picked (UI player). If AI is opponent, AI picks randomly.
+    humanRpsChoice = choice;
+    if (!challengerIsHuman)
+    {
+      // challenger is AI; otherRpsChoice stores AI challenger choice
+      otherRpsChoice = (RPS)rng.Next(3);
+    }
+    else
+    {
+      // challenger is human; otherRpsChoice is AI's choice
+      otherRpsChoice = (RPS)rng.Next(3);
+    }
+    ResolveRPS();
+  }
+
+  void SetHumanRPSChoice(bool isChallenger, RPS choice)
+  {
+    if (isChallenger)
+      humanRpsChoice = choice;
+    else
+      otherRpsChoice = choice;
+
+    if (humanRpsChoice != null && otherRpsChoice != null)
+    {
+      ResolveRPS();
+    }
+  }
+
+  void ResolveRPS()
+  {
+    if (humanRpsChoice == null || otherRpsChoice == null) return;
+    if (humanRpsChoice == otherRpsChoice)
+    {
+      rpsMessage = "Tie — try again";
+      humanRpsChoice = null;
+      otherRpsChoice = null;
+      return;
+    }
+
+    // Determine challenger choice and other choice based on who initiated
+    RPS challengerChoice = challengerIsHuman ? humanRpsChoice.Value : otherRpsChoice.Value;
+    RPS otherChoice = challengerIsHuman ? otherRpsChoice.Value : humanRpsChoice.Value;
+
+    bool challengerWins = (
+      (challengerChoice == RPS.Rock && otherChoice == RPS.Scissors) ||
+      (challengerChoice == RPS.Paper && otherChoice == RPS.Rock) ||
+      (challengerChoice == RPS.Scissors && otherChoice == RPS.Paper)
+    );
+
+    bool winnerIsX = challengerWins ? challengerIsX : !challengerIsX;
+    ApplyMark(pendingIndex, winnerIsX ? "X" : "O");
+    rpsMessage = null;
+    pendingIndex = -1;
+    chosenRandomMode = null;
+    humanRpsChoice = null;
+    otherRpsChoice = null;
+    _ = PostMoveAsync();
+  }
+
+  void CancelPending()
+  {
+    pendingIndex = -1;
+    humanRpsChoice = null;
+    otherRpsChoice = null;
+    rpsMessage = null;
   }
 
   int BestMove(string aiMark)
