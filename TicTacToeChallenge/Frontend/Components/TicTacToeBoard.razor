@@ -1,0 +1,238 @@
+@using System.Linq
+@using System.Threading.Tasks
+
+<div class="tictactoe-root">
+  <div class="header">
+  <h2>Tic Tac Toe</h2>
+  <div class="controls">
+    <label style="margin-right:8px">Opponent:</label>
+    <select @onchange="OnOpponentChanged">
+    <option value="Human" selected>Human</option>
+    <option value="AI">AI</option>
+    </select>
+    <label style="margin:0 8px">You:</label>
+    <select @onchange="OnPlayerSymbolChanged">
+    <option value="X" selected>X</option>
+    <option value="O">O</option>
+    </select>
+    <button class="new-btn" @onclick="NewGame">New Game</button>
+    <span class="status">@StatusText</span>
+  </div>
+  </div>
+
+  <div class="board" role="grid" aria-label="Tic Tac Toe board">
+  @for (int i = 0; i < 9; i++)
+  {
+    var idx = i;
+    <button class="cell" @onclick="@( () => MakeMove(idx) )" disabled="@IsCellDisabled(idx)">@board[idx]</button>
+  }
+  </div>
+
+  @if (gameOver)
+  {
+  <div class="result">@ResultText</div>
+  }
+</div>
+
+@code {
+  enum OpponentType { Human, AI }
+
+  string?[] board = new string?[9];
+  bool xTurn = true;
+  bool gameOver = false;
+  string? winner = null;
+  OpponentType opponent = OpponentType.Human;
+  bool playerIsX = true; // player choice
+
+  protected override void OnInitialized()
+  {
+    NewGame();
+  }
+
+  void OnOpponentChanged(ChangeEventArgs e)
+  {
+    opponent = e.Value?.ToString() == "AI" ? OpponentType.AI : OpponentType.Human;
+    NewGame();
+  }
+
+  void OnPlayerSymbolChanged(ChangeEventArgs e)
+  {
+    playerIsX = e.Value?.ToString() != "O";
+    NewGame();
+  }
+
+  void NewGame()
+  {
+    for (int i = 0; i < 9; i++) board[i] = null;
+    xTurn = true;
+    gameOver = false;
+    winner = null;
+    if (opponent == OpponentType.AI)
+    {
+      // If player chose O, AI starts
+      if (!playerIsX)
+      {
+        _ = AIMoveIfNeeded();
+      }
+    }
+  }
+
+  async Task MakeMove(int idx)
+  {
+    if (idx < 0 || idx >= board.Length) return;
+    if (gameOver || board[idx] != null) return;
+    // prevent clicking when it's AI turn
+    if (opponent == OpponentType.AI && xTurn != playerIsX) return;
+
+    board[idx] = xTurn ? "X" : "O";
+    if (CheckWinner())
+    {
+      gameOver = true;
+      winner = board[idx];
+      return;
+    }
+    if (board.All(s => s != null))
+    {
+      gameOver = true;
+      winner = null; // draw
+      return;
+    }
+
+    xTurn = !xTurn;
+
+    if (opponent == OpponentType.AI)
+    {
+      await AIMoveIfNeeded();
+    }
+  }
+
+  async Task AIMoveIfNeeded()
+  {
+    await Task.Delay(220);
+    if (gameOver) return;
+
+    string aiMark = playerIsX ? "O" : "X";
+    bool aiPlaysX = aiMark == "X";
+    if (xTurn != aiPlaysX) return; // not AI's turn
+
+    int move = BestMove(aiMark);
+    if (move >= 0)
+    {
+      board[move] = aiMark;
+      if (CheckWinner())
+      {
+        gameOver = true;
+        winner = aiMark;
+      }
+      else if (board.All(s => s != null))
+      {
+        gameOver = true;
+        winner = null;
+      }
+      else
+      {
+        xTurn = !xTurn;
+      }
+      await InvokeAsync(StateHasChanged);
+    }
+  }
+
+  int BestMove(string aiMark)
+  {
+    string human = aiMark == "X" ? "O" : "X";
+    int bestScore = int.MinValue;
+    int bestMove = -1;
+    for (int i = 0; i < 9; i++)
+    {
+      if (board[i] == null)
+      {
+        board[i] = aiMark;
+        int score = Minimax(board, false, aiMark, human);
+        board[i] = null;
+        if (score > bestScore)
+        {
+          bestScore = score;
+          bestMove = i;
+        }
+      }
+    }
+    return bestMove;
+  }
+
+  int Minimax(string?[] b, bool isMaximizing, string ai, string human)
+  {
+    if (CheckWinnerForBoard(b, ai)) return 1;
+    if (CheckWinnerForBoard(b, human)) return -1;
+    if (b.All(s => s != null)) return 0;
+
+    if (isMaximizing)
+    {
+      int best = int.MinValue;
+      for (int i = 0; i < 9; i++)
+      {
+        if (b[i] == null)
+        {
+          b[i] = ai;
+          best = Math.Max(best, Minimax(b, false, ai, human));
+          b[i] = null;
+        }
+      }
+      return best;
+    }
+    else
+    {
+      int best = int.MaxValue;
+      for (int i = 0; i < 9; i++)
+      {
+        if (b[i] == null)
+        {
+          b[i] = human;
+          best = Math.Min(best, Minimax(b, true, ai, human));
+          b[i] = null;
+        }
+      }
+      return best;
+    }
+  }
+
+  bool CheckWinnerForBoard(string?[] b, string mark)
+  {
+    int[][] wins = new int[][] {
+      new[]{0,1,2}, new[]{3,4,5}, new[]{6,7,8},
+      new[]{0,3,6}, new[]{1,4,7}, new[]{2,5,8},
+      new[]{0,4,8}, new[]{2,4,6}
+    };
+    foreach (var w in wins)
+    {
+      if (b[w[0]] == mark && b[w[1]] == mark && b[w[2]] == mark) return true;
+    }
+    return false;
+  }
+
+  bool CheckWinner()
+  {
+    if (board == null) return false;
+    int[][] wins = new int[][] {
+      new[]{0,1,2}, new[]{3,4,5}, new[]{6,7,8},
+      new[]{0,3,6}, new[]{1,4,7}, new[]{2,5,8},
+      new[]{0,4,8}, new[]{2,4,6}
+    };
+    foreach (var w in wins)
+    {
+      var a = board[w[0]];
+      if (a != null && a == board[w[1]] && a == board[w[2]]) return true;
+    }
+    return false;
+  }
+
+  bool IsCellDisabled(int i)
+  {
+    if (gameOver) return true;
+    if (board[i] != null) return true;
+    if (opponent == OpponentType.AI && xTurn != playerIsX) return true; // AI's turn
+    return false;
+  }
+
+  string StatusText => gameOver ? "Game over" : (xTurn ? "X's turn" : "O's turn");
+  string ResultText => winner == null ? "Draw" : $"{winner} wins!";
+}
